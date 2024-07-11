@@ -124,6 +124,14 @@ trap_fprintf(FILE *fp, const char *fmt, ...)
 #undef main
 #undef private
 #undef fprintf
+#define PAIR_TO_NUM(z) \
+    ((z) == 5 ? std::make_pair(0, 3) : \
+    ((z) == 1 ? std::make_pair(1, 2) : \
+    ((z) == 2 ? std::make_pair(2, 1) : \
+    ((z) == 3 ? std::make_pair(2, 3) : \
+    ((z) == 4 ? std::make_pair(3, 2) : \
+    ((z) == 6 ? std::make_pair(3, 0) : \
+    std::make_pair(-1, -1)))))))
 
 struct basepair_prob {
     int32_t i;
