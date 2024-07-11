@@ -242,24 +242,26 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
             TerminalAU37 = ModTerminalAP37;
-            for (int i = 0; i < NBPAIRS + 1; i++) {
-                for (int j = 0; j < NBPAIRS + 1; j++) {
-                    stack37[i][j] += diff_psi[i][j];
-                    for (int k = 0; k < NOTON; k++){
-                        for (int l = 0; l < NOTON; l++){
-                            int11_37[i][j][k][l] += diff_psi[i][j];
-                            for (int m = 0; m < NOTON; m++){
-                                int21_37[i][j][k][l][m] += diff_psi[i][j];
-                                for (int n = 0; n < NOTON; n++){
-                                    int22_37[i][j][k][l][m][n] += diff_psi[i][j];
+            if (!used_psi){
+                for (int i = 0; i < NBPAIRS + 1; i++) {
+                    for (int j = 0; j < NBPAIRS + 1; j++) {
+                        stack37[i][j] += diff_psi[i][j];
+                        for (int k = 0; k < NOTON; k++){
+                            for (int l = 0; l < NOTON; l++){
+                                int11_37[i][j][k][l] += diff_psi[i][j];
+                                for (int m = 0; m < NOTON; m++){
+                                    int21_37[i][j][k][l][m] += diff_psi[i][j];
+                                    for (int n = 0; n < NOTON; n++){
+                                        int22_37[i][j][k][l][m][n] += diff_psi[i][j];
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
             used_psi = true;
-        }
+            }
+    } 
     } else {
         PyErr_SetString(PyExc_ValueError,
                     "mod must be 'modified bases'.\n"
