@@ -29,6 +29,7 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
 #include <fstream>
+#include <algorithm>
 int
 trap_fprintf(FILE *fp, const char *fmt, ...)
 {
@@ -114,8 +115,11 @@ trap_fprintf(FILE *fp, const char *fmt, ...)
 #define rtrim LPV_rtrim
 #define pf_type LPV_pf_type
 #define value_type LPV_value_type
-#include "LinearPartition.cpp"
 #include "contrib/pseudouridine.h"
+#include "contrib/intl11.h"
+#include "contrib/intl21.h"
+#include "contrib/intl22.h"
+#include "LinearPartition.cpp"
 #undef State
 #undef main
 #undef private
@@ -191,7 +195,12 @@ PyDoc_STRVAR(linearpartition_partition_doc,
 Return the base-pairing probability matrix and ensemble free energy \
 predicted by LinearPartition.");
 
+// Using modified base pair parameters for pseudouridine
+// As we are hot swapping the parameter files we need to keep track of the original values
+// By contrast, ViennaRNA uses a soft constraint method to handle modified bases
+// TODO: Implement a soft constraint method
 bool used_psi = false;
+int OriTerminalAU37 = TerminalAU37;
 
 static PyObject *
 linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
@@ -220,15 +229,35 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 
     if (strcmp(mod, "none") == 0) {
         if (used_psi){
-            memcpy(stack37, ori_stack37, sizeof(stack37));
+            TerminalAU37 = OriTerminalAU37;
+            std::memcpy(stack37, ori_stack37, sizeof(stack37));
+            std::memcpy(int11_37, ori_int11_37, sizeof(int11_37));
+            std::memcpy(int21_37, ori_int21_37, sizeof(int21_37));
+            std::memcpy(int22_37, ori_int22_37, sizeof(int22_37));
             used_psi = false;
         }
     } else if (strcmp(mod, "psi") == 0) {
         if (engine_enum == ETERNA) {
             PyErr_SetString(PyExc_ValueError,
-                    "Currently EternaFold does not support modified bass.");
+                    "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
-            memcpy(stack37, psi_stack37, sizeof(stack37));
+            TerminalAU37 = ModTerminalAP37;
+            for (int i = 0; i < NBPAIRS + 1; i++) {
+                for (int j = 0; j < NBPAIRS + 1; j++) {
+                    stack37[i][j] += diff_psi[i][j];
+                    for (int k = 0; k < NOTON; k++){
+                        for (int l = 0; l < NOTON; l++){
+                            int11_37[i][j][k][l] += diff_psi[i][j];
+                            for (int m = 0; m < NOTON; m++){
+                                int21_37[i][j][k][l][m] += diff_psi[i][j];
+                                for (int n = 0; n < NOTON; n++){
+                                    int22_37[i][j][k][l][m][n] += diff_psi[i][j];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             used_psi = true;
         }
     } else {
