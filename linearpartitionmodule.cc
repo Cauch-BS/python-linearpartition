@@ -28,7 +28,6 @@
 
 #include "Python.h"
 #include "numpy/arrayobject.h"
-
 #include <fstream>
 int
 trap_fprintf(FILE *fp, const char *fmt, ...)
@@ -116,7 +115,7 @@ trap_fprintf(FILE *fp, const char *fmt, ...)
 #define pf_type LPV_pf_type
 #define value_type LPV_value_type
 #include "LinearPartition.cpp"
-
+#include "contrib/pseudouridine.h"
 #undef State
 #undef main
 #undef private
@@ -189,29 +188,53 @@ public:
 PyDoc_STRVAR(linearpartition_partition_doc,
 "partition(seq)\n\
 \n\
-Return the base-pairing probability matrix and ensembl free energy \
+Return the base-pairing probability matrix and ensemble free energy \
 predicted by LinearPartition.");
+
+bool used_psi = false;
 
 static PyObject *
 linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    const char *seq, *mode="vienna";
+    const char *seq, *engine="vienna", *mod = "none";
     int beamsize=100, dangles=2;
-    static const char *kwlist[] = {"seq", "mode", "beamsize", "dangles", NULL};
-    enum { ETERNA, VIENNA } mode_enum;
+    static const char *kwlist[] = {"seq", "engine", "mod",
+                                   "beamsize", "dangles", NULL};
+    enum { ETERNA, VIENNA } engine_enum;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|sii:partition",
-                                     (char**)kwlist, &seq, &mode,
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssii:partition",
+                                     (char**)kwlist, &seq, &engine, &mod,
                                      &beamsize, &dangles))
         return NULL;
 
-    if (strcmp(mode, "eterna") == 0)
-        mode_enum = ETERNA;
-    else if (strcmp(mode, "vienna") == 0)
-        mode_enum = VIENNA;
+    if (strcmp(engine, "eterna") == 0)
+        engine_enum = ETERNA;
+    else if (strcmp(engine, "vienna") == 0)
+        engine_enum = VIENNA;
     else {
         PyErr_SetString(PyExc_ValueError,
-                        "mode must be either 'eterna' or 'vienna'");
+                        "engine must be either 'eterna' or 'vienna'");
+        return NULL;
+    }
+
+
+    if (strcmp(mod, "none") == 0) {
+        if (used_psi){
+            memcpy(stack37, ori_stack37, sizeof(stack37));
+            used_psi = false;
+        }
+    } else if (strcmp(mod, "psi") == 0) {
+        if (engine_enum == ETERNA) {
+            PyErr_SetString(PyExc_ValueError,
+                    "Currently EternaFold does not support modified bass.");
+        } else if (engine_enum == VIENNA) {
+            memcpy(stack37, psi_stack37, sizeof(stack37));
+            used_psi = true;
+        }
+    } else {
+        PyErr_SetString(PyExc_ValueError,
+                    "mod must be 'modified bases'.\n"
+                    "Currently only no modifications and 'psi' (pseudouridine) is supported.");
         return NULL;
     }
 
@@ -220,7 +243,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
     double free_energy;
 
     /* Call LinearPartition */
-    switch (mode_enum) {
+    switch (engine_enum) {
     case ETERNA: {
         EternaBeamCKYParser parser(beamsize, true, false, "", "", false, 0.0,
             "", false, 3.0, "", false, false, 0.3, "", "", false, dangles);
@@ -250,7 +273,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
     }
 
     default:
-        PyErr_SetString(PyExc_RuntimeError, "unknown mode");
+        PyErr_SetString(PyExc_RuntimeError, "unknown engine");
         return NULL;
     }
 
