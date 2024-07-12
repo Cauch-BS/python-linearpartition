@@ -29,7 +29,6 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
 #include <fstream>
-#include <set>
 
 int
 trap_fprintf(FILE *fp, const char *fmt, ...)
@@ -164,8 +163,8 @@ static PyArray_Descr *partition_return_descr;
 // By contrast, ViennaRNA uses a soft constraint method to handle modified bases
 // TODO: Implement a soft constraint method
 
-bool used_mod = false; /*True if mod is used. If false, update_bases is not run*/
-set<string> supported_mods = {"psi", "m1psi"};
+bool used_psi = false; /*True if mod is used. If false, update_bases is not run*/
+bool used_m1psi = false; /*True if mod is used. If false, update_bases is not run*/
 
 int OriTerminalAU37 = TerminalAU37;
 int ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
@@ -173,7 +172,7 @@ int ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
 
 /* NOTICE: update_bases should only be run once per modification
 Else the return to origin will not work properly.
-This is managed with the used_mod boolean*/
+This is managed with the used_psi boolean*/
 void update_bases(string mod){
 
     // Differences with the original values
@@ -193,14 +192,17 @@ void update_bases(string mod){
     } else {
         PyErr_SetString(PyExc_ValueError,
             "mod must be 'modified bases'.\n"
-            "Currently only no modifications and 'psi' (pseudouridine) is supported.");
+            "Currently only no modifications and 'psi' (pseudouridine) and \n"
+            "'m1psi' (N1-methylpseudouridine) is supported.");
         return;
     }
 
     if (mod != "none"){
         // Store the original values
-        if (!used_mod){
+        if (!used_psi && !used_m1psi){
             memcpy(ori_stack37, stack37, sizeof(stack37));
+        } else {
+            memcpy(stack37, ori_stack37, sizeof(stack37));
         }
         // Update the values
         TerminalAU37 = ModTerminal;
@@ -215,6 +217,7 @@ void update_bases(string mod){
             memcpy(stack37, ori_stack37, sizeof(stack37));
     }
 }
+
 
 class EternaBeamCKYParser : public LPE_BeamCKYParser {
 public:
@@ -276,24 +279,35 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 
 
     if (strcmp(mod, "none") == 0) {
-        if (used_mod){
+        if (used_psi && used_m1psi){
             update_bases("none");
-            used_mod = false;
+            used_psi = false;
         }
-    } else if (supported_mods.find(mod) != supported_mods.end()){
+    } else if (strcmp(mod, "psi") == 0) {
         if (engine_enum == ETERNA) {
             PyErr_SetString(PyExc_ValueError,
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
-            if (!used_mod){
-                update_bases("mod");
-                used_mod = true;
+            if (!used_psi){
+                update_bases("psi");
+                used_psi = true;
+            }
+        } 
+    } else if (strcmp(mod, "m1psi") == 0) {
+        if (engine_enum == ETERNA) {
+            PyErr_SetString(PyExc_ValueError,
+                    "Currently EternaFold does not support modified bases.");
+        } else if (engine_enum == VIENNA) {
+            if (!used_psi){
+                update_bases("m1psi");
+                used_psi = true;
             }
         } 
     } else {
         PyErr_SetString(PyExc_ValueError,
-                    "mod must be 'modified bases'.\n"
-                    "Currently only 'psi' (pseudouridine) and m1psi (N1-methylpeudoruridine) is supported.");
+                        "mod must be 'modified bases'.\n"
+                        "Currently only no modifications and 'psi' (pseudouridine) and \n"
+                        "'m1psi' (N1-methylpseudouridine) is supported.");
         return NULL;
     }
 
