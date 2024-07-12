@@ -23,6 +23,6 @@ done
 
 # Install packages and test
 for PYBIN in /opt/python/*/bin/; do
-    "${PYBIN}/pip" install linearpartition --no-index -f /io/wheelhouse
+    "${PYBIN}/pip" install linearpartition-unofficial --no-index -f /io/wheelhouse
     "${PYBIN}/python" /io/tests/test_linearpartition.py
 done
