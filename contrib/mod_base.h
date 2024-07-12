@@ -42,11 +42,6 @@ DOI : 10.1261/rna.039610.113
     },
 }
 */
- 
-/*
- author: Chaebeom Sheen
- edited at: 07/09/2024
-*/
 
 int ModTerminalAP37 = 31;
 
