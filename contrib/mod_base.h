@@ -63,17 +63,3 @@ int diff_psi[NBPAIRS+1][NBPAIRS+1] =
      /*NN*/,{           0,          0,          0,          0,          0,          0,          0,          0}
     } ;
 
-int ori_stack37[NBPAIRS+1][NBPAIRS+1] =
-     
-    {
-    //                              CG          GC         GU          UG          AU         UA         NN    
-            {      VIE_INF,    VIE_INF,    VIE_INF,   VIE_INF,    VIE_INF,    VIE_INF,    VIE_INF,   VIE_INF}
-     /*CG*/,{      VIE_INF,       -240,       -330,      -210,       -140,       -210,       -210,      -140}
-     /*GC*/,{      VIE_INF,       -330,       -340,      -250,       -150,       -220,       -240,      -150}
-     /*GU*/,{      VIE_INF,       -210,       -250,       130,        -50,       -140,       -130,       130}
-     /*UG*/,{      VIE_INF,       -140,       -150,       -50,         30,        -60,       -100,        30}
-     /*AU*/,{      VIE_INF,       -210,       -220,      -140,        -60,       -110,        -90,       -60}
-     /*UA*/,{      VIE_INF,       -210,       -240,      -130,       -100,        -90,       -130,       -90}
-     /*NN*/,{      VIE_INF,       -140,       -150,       130,         30,        -60,        -90,       130}
-     };
-
