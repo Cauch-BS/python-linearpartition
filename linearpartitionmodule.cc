@@ -279,9 +279,10 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 
 
     if (strcmp(mod, "none") == 0) {
-        if (used_psi && used_m1psi){
+        if ((used_psi || used_m1psi)){
             update_bases("none");
             used_psi = false;
+            used_m1psi = false;
         }
     } else if (strcmp(mod, "psi") == 0) {
         if (engine_enum == ETERNA) {
@@ -291,6 +292,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
             if (!used_psi){
                 update_bases("psi");
                 used_psi = true;
+                used_m1psi = false;
             }
         } 
     } else if (strcmp(mod, "m1psi") == 0) {
@@ -298,9 +300,10 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
             PyErr_SetString(PyExc_ValueError,
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
-            if (!used_psi){
+            if (!used_m1psi){
                 update_bases("m1psi");
-                used_psi = true;
+                used_m1psi = true;
+                used_psi = false;
             }
         } 
     } else {
