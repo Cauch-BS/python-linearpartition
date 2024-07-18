@@ -29,6 +29,8 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
 #include <fstream>
+// #include <sstream>
+// #include <string>
 
 int
 trap_fprintf(FILE *fp, const char *fmt, ...)
@@ -165,6 +167,7 @@ static PyArray_Descr *partition_return_descr;
 
 bool used_psi = false; /*True if mod is used. If false, update_bases is not run*/
 bool used_m1psi = false; /*True if mod is used. If false, update_bases is not run*/
+bool updated_stack = false; /*True if stack37 has been updated*/
 
 int OriTerminalAU37 = TerminalAU37;
 int ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
@@ -172,7 +175,7 @@ int ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
 
 /* NOTICE: update_bases should only be run once per modification
 Else the return to origin will not work properly.
-This is managed with the used_psi boolean*/
+This is managed with the used_psi and used_m1psi booleans*/
 void update_bases(string mod){
 
     // Differences with the original values
@@ -199,7 +202,7 @@ void update_bases(string mod){
 
     if (mod != "none"){
         // Store the original values
-        if (!used_psi && !used_m1psi){
+        if (!used_psi && !used_m1psi && !updated_stack){
             memcpy(ori_stack37, stack37, sizeof(stack37));
         } else {
             memcpy(stack37, ori_stack37, sizeof(stack37));
@@ -257,14 +260,17 @@ static PyObject *
 linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 {
     const char *seq, *engine="vienna", *mod = "none";
-    int beamsize=100, dangles=2;
+    int beamsize=100, dangles=2, update_terminal = OriTerminalAU37;
+    PyObject *update_stack = NULL;
     static const char *kwlist[] = {"seq", "engine", "mod",
-                                   "beamsize", "dangles", NULL};
+                                   "beamsize", "dangles", "update_terminal",
+                                   "update_stack", NULL};
     enum { ETERNA, VIENNA } engine_enum;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssii:partition",
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssiiiO:partition",
                                      (char**)kwlist, &seq, &engine, &mod,
-                                     &beamsize, &dangles))
+                                     &beamsize, &dangles,
+                                     &update_terminal, &update_stack))
         return NULL;
 
     if (strcmp(engine, "eterna") == 0)
@@ -277,12 +283,23 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    if (update_stack != NULL || update_terminal != OriTerminalAU37){ 
+        if (PyArray_Check(update_stack)) {
+            mod = "custom";
+        } else {
+            PyErr_SetString(PyExc_ValueError,
+                            "update_stack must be a numpy array");
+            return NULL;
+        }
+    }
+
 
     if (strcmp(mod, "none") == 0) {
-        if ((used_psi || used_m1psi)){
+        if ((used_psi || used_m1psi || updated_stack)){
             update_bases("none");
             used_psi = false;
             used_m1psi = false;
+            updated_stack = false;
         }
     } else if (strcmp(mod, "psi") == 0) {
         if (engine_enum == ETERNA) {
@@ -293,6 +310,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                 update_bases("psi");
                 used_psi = true;
                 used_m1psi = false;
+                updated_stack = false;
             }
         } 
     } else if (strcmp(mod, "m1psi") == 0) {
@@ -304,8 +322,61 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                 update_bases("m1psi");
                 used_m1psi = true;
                 used_psi = false;
+                updated_stack = false;
             }
         } 
+
+    } else if (strcmp(mod, "custom") == 0) {
+        if (engine_enum == ETERNA) {
+            PyErr_SetString(PyExc_ValueError,
+                    "Currently EternaFold does not support modified bases.");
+        } else if (engine_enum == VIENNA) {
+            if ((update_stack != NULL) &&  (PyArray_Check(update_stack))){
+                if (!updated_stack && !used_psi && !used_m1psi){
+                    memcpy(ori_stack37, stack37, sizeof(stack37));
+                } else {
+                    memcpy(stack37, ori_stack37, sizeof(stack37));
+                }
+
+                PyArrayObject *arr = (PyArrayObject *)update_stack;
+                int nd = PyArray_NDIM(arr);
+                if (nd != 2){
+                    PyErr_SetString(PyExc_ValueError,
+                                "update_stack must be a 2D array.");
+                    return NULL;
+                }
+                npy_intp *shape = PyArray_DIMS(arr);
+                if (shape[0] != NBPAIRS + 1 || shape[1] != NBPAIRS + 1){
+                    PyErr_SetString(PyExc_ValueError,
+                                "update_stack is of incorrect shape. Rseshape to 8 x 8 array.");
+                    return NULL;
+                }
+
+                if (PyArray_TYPE(arr) != NPY_INT64){
+                    PyErr_SetString(PyExc_ValueError,
+                                "update_stack must be of dtype int64.");
+                    return NULL;
+                }
+
+                int64_t *diffs = (int64_t *)(PyArray_DATA(arr));
+                for (int i = 0; i < NBPAIRS + 1; i++) {
+                    for (int j = 0; j < NBPAIRS + 1; j++) {
+                        stack37[i][j] += diffs[i * (NBPAIRS + 1) + j];
+                    }
+                }
+            } else {
+                PyErr_SetString(PyExc_ValueError,
+                        "when mod is 'custom', update_stack must be passed as a numpy array");
+                return NULL;
+            }
+
+            TerminalAU37 = update_terminal;
+
+            updated_stack = true;
+            used_m1psi = false;
+            used_psi = false;
+            
+        }
     } else {
         PyErr_SetString(PyExc_ValueError,
                         "mod must be 'modified bases'.\n"
@@ -313,6 +384,19 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                         "'m1psi' (N1-methylpseudouridine) is supported.");
         return NULL;
     }
+
+    // For debugging
+    // Print the Updated Stack
+    // std::ostringstream oss;
+    // oss<< "Stack array contents:\n";
+    // for (int i = 0; i < NBPAIRS + 1; i++) {
+    //     for (int j = 0; j < NBPAIRS + 1; j++) {
+    //         oss << stack37[i][j] << " ";
+    //     }
+    //     oss << "\n";
+    // }
+    // std::string diffs_str = oss.str();
+    // fprintf(stderr, "%s\n", diffs_str.c_str());
 
     string rna_seq(seq);
     PyObject *probmtx;
