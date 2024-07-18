@@ -6,7 +6,8 @@
                 "${workspaceFolder}/**",
                 "/usr/include/python3.10",
                 "/home/catbase/.local/lib/python3.10/site-packages/pybind11/include/**",
-                "/home/catbase/.local/lib/python3.10/site-packages/numpy/core/include/**"
+                "/home/catbase/.local/lib/python3.10/site-packages/numpy/core/include/**",
+                "/home/catbase/.local/lib/python3.10/site-packages/torch/include/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

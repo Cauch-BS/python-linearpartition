@@ -28,7 +28,11 @@
 
 #include "Python.h"
 #include "numpy/arrayobject.h"
+#include "ATen/ATen.h"
+#include "torch/python.h"
+#include "torch/extension.h"
 #include <fstream>
+// for debuging purposes
 // #include <sstream>
 // #include <string>
 
@@ -169,8 +173,9 @@ bool used_psi = false; /*True if mod is used. If false, update_bases is not run*
 bool used_m1psi = false; /*True if mod is used. If false, update_bases is not run*/
 bool updated_stack = false; /*True if stack37 has been updated*/
 
-int OriTerminalAU37 = TerminalAU37;
-int ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
+double OriTerminalAU37 = TerminalAU37;
+double ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
+size_t size_of_stack = (NBPAIRS + 1) * (NBPAIRS + 1) * sizeof(double);
 
 
 /* NOTICE: update_bases should only be run once per modification
@@ -179,17 +184,17 @@ This is managed with the used_psi and used_m1psi booleans*/
 void update_bases(string mod){
 
     // Differences with the original values
-    int diff[NBPAIRS + 1][NBPAIRS + 1];
-    memset(diff, 0, sizeof(diff));
-    int ModTerminal = 0;
+    double diff[NBPAIRS + 1][NBPAIRS + 1];
+    memset(diff, 0, size_of_stack);
+    double ModTerminal = 0;
     
     // Load the values for modified bases
     if (mod == "psi"){
         ModTerminal = ModTerminalAP37;
-        memcpy(diff, diff_psi, sizeof(diff_psi));
+        memcpy(diff, diff_psi, size_of_stack);
     } else if (mod == "m1psi"){
         ModTerminal = ModTerminalAP37;
-        memcpy(diff, diff_m1psi, sizeof(diff_m1psi));
+        memcpy(diff, diff_m1psi, size_of_stack);
     }  else if (mod == "none"){
         // No modifications
     } else {
@@ -203,9 +208,9 @@ void update_bases(string mod){
     if (mod != "none"){
         // Store the original values
         if (!used_psi && !used_m1psi && !updated_stack){
-            memcpy(ori_stack37, stack37, sizeof(stack37));
+            memcpy(ori_stack37, stack37, size_of_stack);
         } else {
-            memcpy(stack37, ori_stack37, sizeof(stack37));
+            memcpy(stack37, ori_stack37, size_of_stack);
         }
         // Update the values
         TerminalAU37 = ModTerminal;
@@ -217,7 +222,7 @@ void update_bases(string mod){
     } else if (mod == "none"){
             TerminalAU37 = OriTerminalAU37;
             // Return to the original values
-            memcpy(stack37, ori_stack37, sizeof(stack37));
+            memcpy(stack37, ori_stack37, size_of_stack);
     }
 }
 
@@ -260,7 +265,8 @@ static PyObject *
 linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 {
     const char *seq, *engine="vienna", *mod = "none";
-    int beamsize=100, dangles=2, update_terminal = OriTerminalAU37;
+    int beamsize=100, dangles=2;
+    double update_terminal = OriTerminalAU37;
     PyObject *update_stack = NULL;
     static const char *kwlist[] = {"seq", "engine", "mod",
                                    "beamsize", "dangles", "update_terminal",
@@ -284,11 +290,16 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
     }
 
     if (update_stack != NULL || update_terminal != OriTerminalAU37){ 
-        if (PyArray_Check(update_stack)) {
+        if (THPVariable_Check(update_stack)) {
+            if ((strcmp(mod, "custom") != 0)||(strcmp(mod, "none") != 0)){
+                PyErr_SetString(PyExc_ValueError,
+                            "mod must be 'custom' when update is passed.");
+                return NULL;
+            }
             mod = "custom";
         } else {
             PyErr_SetString(PyExc_ValueError,
-                            "update_stack must be a numpy array");
+                            "update_stack must be a Pytorch Tensor");
             return NULL;
         }
     }
@@ -331,42 +342,40 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
             PyErr_SetString(PyExc_ValueError,
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
-            if ((update_stack != NULL) &&  (PyArray_Check(update_stack))){
+            if ((update_stack != NULL) &&  (THPVariable_Check(update_stack))){
                 if (!updated_stack && !used_psi && !used_m1psi){
-                    memcpy(ori_stack37, stack37, sizeof(stack37));
+                    memcpy(ori_stack37, stack37, size_of_stack);
                 } else {
-                    memcpy(stack37, ori_stack37, sizeof(stack37));
+                    memcpy(stack37, ori_stack37, size_of_stack);
                 }
 
-                PyArrayObject *arr = (PyArrayObject *)update_stack;
-                int nd = PyArray_NDIM(arr);
-                if (nd != 2){
+                auto tensor = THPVariable_Unpack(update_stack);
+                if (tensor.dim() != 2){
                     PyErr_SetString(PyExc_ValueError,
-                                "update_stack must be a 2D array.");
+                                "update_stack must be a 2D tensor.");
                     return NULL;
                 }
-                npy_intp *shape = PyArray_DIMS(arr);
-                if (shape[0] != NBPAIRS + 1 || shape[1] != NBPAIRS + 1){
+                if (tensor.size(0) != NBPAIRS + 1 || tensor.size(1) != NBPAIRS + 1){
                     PyErr_SetString(PyExc_ValueError,
-                                "update_stack is of incorrect shape. Rseshape to 8 x 8 array.");
+                                "update_stack is of incorrect shape. Reshape to 8 x 8 tensor.");
                     return NULL;
                 }
-
-                if (PyArray_TYPE(arr) != NPY_INT64){
+                if (tensor.scalar_type() != torch::kDouble){
                     PyErr_SetString(PyExc_ValueError,
-                                "update_stack must be of dtype int64.");
+                                "update_stack must be of dtype torch.float64 (double).");
                     return NULL;
                 }
 
-                int64_t *diffs = (int64_t *)(PyArray_DATA(arr));
+                tensor = tensor.contiguous();
+                auto accessor = tensor.accessor<double, 2>();
                 for (int i = 0; i < NBPAIRS + 1; i++) {
                     for (int j = 0; j < NBPAIRS + 1; j++) {
-                        stack37[i][j] += diffs[i * (NBPAIRS + 1) + j];
+                        stack37[i][j] += accessor[i][j];
                     }
                 }
             } else {
                 PyErr_SetString(PyExc_ValueError,
-                        "when mod is 'custom', update_stack must be passed as a numpy array");
+                        "when mod is 'custom', update_stack must be passed as a Pytorch Tensor");
                 return NULL;
             }
 

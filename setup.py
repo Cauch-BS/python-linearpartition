@@ -21,16 +21,22 @@
 # THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-from setuptools import setup, Extension
+from setuptools import setup
+from torch.utils import cpp_extension
 import numpy
 import os
 
 numpy_includes = [numpy.get_include()]
+torch_includes = cpp_extension.include_paths()
+all_includes = ['LinearPartition/src', 'contrib'] + numpy_includes + torch_includes
 
-lpartitionext = Extension(
+lpartitionext = cpp_extension.CppExtension(
             'linearpartition',
             ['linearpartitionmodule.cc'],
-            include_dirs=['LinearPartition/src', 'contrib'] + numpy_includes)
+            include_dirs = all_includes,
+            library_dirs = cpp_extension.library_paths(),
+            libraries = ['torch', 'torch_python']
+            )
 
 if not os.path.exists('LinearPartition/src/LinearPartition.cpp'):
     print('''
@@ -65,6 +71,7 @@ setup(
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
     ext_modules=[lpartitionext],
-    setup_requires=['numpy'],
-    install_requires=['numpy'],
+    cmdclass={'build_ext': cpp_extension.BuildExtension},
+    setup_requires=['numpy', 'torch'],
+    install_requires=['numpy', 'torch'],
 )
