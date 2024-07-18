@@ -1,0 +1,3 @@
+[submodule "LinearPartition"]
+	path = LinearPartition
+	url = https://github.com/Cauch-BS/LinearPartition
