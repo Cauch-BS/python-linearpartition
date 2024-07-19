@@ -32,6 +32,7 @@
 #include "torch/python.h"
 #include "torch/extension.h"
 #include <fstream>
+// FLAG
 // for debuging purposes
 // #include <sstream>
 // #include <string>
@@ -273,7 +274,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                                    "update_stack", NULL};
     enum { ETERNA, VIENNA } engine_enum;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssiiiO:partition",
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssiidO:partition",
                                      (char**)kwlist, &seq, &engine, &mod,
                                      &beamsize, &dangles,
                                      &update_terminal, &update_stack))
@@ -291,7 +292,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 
     if (update_stack != NULL || update_terminal != OriTerminalAU37){ 
         if (THPVariable_Check(update_stack)) {
-            if ((strcmp(mod, "custom") != 0)||(strcmp(mod, "none") != 0)){
+            if ((strcmp(mod, "custom") != 0)&&(strcmp(mod, "none") != 0)){
                 PyErr_SetString(PyExc_ValueError,
                             "mod must be 'custom' when update is passed.");
                 return NULL;
@@ -394,18 +395,23 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    // For debugging
-    // Print the Updated Stack
-    // std::ostringstream oss;
-    // oss<< "Stack array contents:\n";
-    // for (int i = 0; i < NBPAIRS + 1; i++) {
-    //     for (int j = 0; j < NBPAIRS + 1; j++) {
-    //         oss << stack37[i][j] << " ";
+    // if ( true ){
+    //     // For debugging
+    //     // Print the Updated Stack
+    //     std::ostringstream oss_stack, oss_terminal;
+    //     oss_stack << "Stack array contents:\n" << std::setprecision(6) << std::fixed;
+    //     for (int i = 0; i < NBPAIRS + 1; i++) {
+    //         for (int j = 0; j < NBPAIRS + 1; j++) {
+    //             oss_stack << stack37[i][j] << " ";
+    //         }
+    //         oss_stack << "\n";
     //     }
-    //     oss << "\n";
+        
+    //     oss_terminal << "Terminal contents:\n" << TerminalAU37 << "\n";
+        
+    //     std::cerr << oss_stack.str() << std::endl;
+    //     std::cerr << oss_terminal.str() << std::endl;
     // }
-    // std::string diffs_str = oss.str();
-    // fprintf(stderr, "%s\n", diffs_str.c_str());
 
     string rna_seq(seq);
     PyObject *probmtx;
