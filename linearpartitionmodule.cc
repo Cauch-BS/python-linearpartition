@@ -169,8 +169,9 @@ bool used_psi = false; /*True if mod is used. If false, update_bases is not run*
 bool used_m1psi = false; /*True if mod is used. If false, update_bases is not run*/
 bool updated_stack = false; /*True if stack37 has been updated*/
 
-int OriTerminalAU37 = TerminalAU37;
-int ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
+double OriTerminalAU37 = TerminalAU37;
+double ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
+size_t size_of_stack = (NBPAIRS + 1) * (NBPAIRS + 1) * sizeof(double);
 
 
 /* NOTICE: update_bases should only be run once per modification
@@ -179,17 +180,17 @@ This is managed with the used_psi and used_m1psi booleans*/
 void update_bases(string mod){
 
     // Differences with the original values
-    int diff[NBPAIRS + 1][NBPAIRS + 1];
-    memset(diff, 0, sizeof(diff));
-    int ModTerminal = 0;
+    double diff[NBPAIRS + 1][NBPAIRS + 1];
+    memset(diff, 0, size_of_stack);
+    double ModTerminal = 0;
     
     // Load the values for modified bases
     if (mod == "psi"){
         ModTerminal = ModTerminalAP37;
-        memcpy(diff, diff_psi, sizeof(diff_psi));
+        memcpy(diff, diff_psi, size_of_stack);
     } else if (mod == "m1psi"){
         ModTerminal = ModTerminalAP37;
-        memcpy(diff, diff_m1psi, sizeof(diff_m1psi));
+        memcpy(diff, diff_m1psi, size_of_stack);
     }  else if (mod == "none"){
         // No modifications
     } else {
@@ -203,9 +204,9 @@ void update_bases(string mod){
     if (mod != "none"){
         // Store the original values
         if (!used_psi && !used_m1psi && !updated_stack){
-            memcpy(ori_stack37, stack37, sizeof(stack37));
+            memcpy(ori_stack37, stack37, size_of_stack);
         } else {
-            memcpy(stack37, ori_stack37, sizeof(stack37));
+            memcpy(stack37, ori_stack37, size_of_stack);
         }
         // Update the values
         TerminalAU37 = ModTerminal;
@@ -217,7 +218,7 @@ void update_bases(string mod){
     } else if (mod == "none"){
             TerminalAU37 = OriTerminalAU37;
             // Return to the original values
-            memcpy(stack37, ori_stack37, sizeof(stack37));
+            memcpy(stack37, ori_stack37, size_of_stack);
     }
 }
 
@@ -260,7 +261,8 @@ static PyObject *
 linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 {
     const char *seq, *engine="vienna", *mod = "none";
-    int beamsize=100, dangles=2, update_terminal = OriTerminalAU37;
+    int beamsize=100, dangles=2;
+    double update_terminal = OriTerminalAU37;
     PyObject *update_stack = NULL;
     static const char *kwlist[] = {"seq", "engine", "mod",
                                    "beamsize", "dangles", "update_terminal",
@@ -333,9 +335,9 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         } else if (engine_enum == VIENNA) {
             if ((update_stack != NULL) &&  (PyArray_Check(update_stack))){
                 if (!updated_stack && !used_psi && !used_m1psi){
-                    memcpy(ori_stack37, stack37, sizeof(stack37));
+                    memcpy(ori_stack37, stack37, size_of_stack);
                 } else {
-                    memcpy(stack37, ori_stack37, sizeof(stack37));
+                    memcpy(stack37, ori_stack37, size_of_stack);
                 }
 
                 PyArrayObject *arr = (PyArrayObject *)update_stack;
@@ -352,13 +354,13 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                     return NULL;
                 }
 
-                if (PyArray_TYPE(arr) != NPY_INT64){
+                if (PyArray_TYPE(arr) != NPY_FLOAT64){
                     PyErr_SetString(PyExc_ValueError,
                                 "update_stack must be of dtype int64.");
                     return NULL;
                 }
 
-                int64_t *diffs = (int64_t *)(PyArray_DATA(arr));
+                long *diffs = (long *)(PyArray_DATA(arr));
                 for (int i = 0; i < NBPAIRS + 1; i++) {
                     for (int j = 0; j < NBPAIRS + 1; j++) {
                         stack37[i][j] += diffs[i * (NBPAIRS + 1) + j];
