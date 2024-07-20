@@ -29,8 +29,9 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
 #include <fstream>
-// #include <sstream>
-// #include <string>
+#include <sstream>
+#include <string>
+#include <iomanip>
 
 int
 trap_fprintf(FILE *fp, const char *fmt, ...)
@@ -387,18 +388,23 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    // For debugging
-    // Print the Updated Stack
-    // std::ostringstream oss;
-    // oss<< "Stack array contents:\n";
-    // for (int i = 0; i < NBPAIRS + 1; i++) {
-    //     for (int j = 0; j < NBPAIRS + 1; j++) {
-    //         oss << stack37[i][j] << " ";
-    //     }
-    //     oss << "\n";
-    // }
-    // std::string diffs_str = oss.str();
-    // fprintf(stderr, "%s\n", diffs_str.c_str());
+    if ( true ){
+        // For debugging
+        // Print the Updated Stack
+        std::ostringstream oss_stack, oss_terminal;
+        oss_stack << "Stack array contents:\n" << std::setprecision(6) << std::fixed;
+        for (int i = 0; i < NBPAIRS + 1; i++) {
+            for (int j = 0; j < NBPAIRS + 1; j++) {
+                oss_stack << stack37[i][j] << " ";
+            }
+            oss_stack << "\n";
+        }
+        
+        oss_terminal << "Terminal contents:\n" << TerminalAU37 << "\n";
+        
+        std::cerr << oss_stack.str() << std::endl;
+        std::cerr << oss_terminal.str() << std::endl;
+    }
 
     string rna_seq(seq);
     PyObject *probmtx;
