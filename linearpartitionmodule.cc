@@ -255,7 +255,8 @@ public:
 PyDoc_STRVAR(linearpartition_partition_doc,
 "partition(seq)\n\
 \n\
-Return the base-pairing probability matrix and ensemble free energy \
+Return the base-pairing probability matrix and ensemble free energy \n \
+and probability vector for the RNA sequence seq \n\
 predicted by LinearPartition.");
 
 static PyObject *
@@ -445,9 +446,42 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    PyObject *ret=Py_BuildValue("Od", probmtx, free_energy);
-    Py_DECREF(probmtx);
+    // Create a probability vector
+    size_t seqlen = rna_seq.size();
+    npy_intp prob_vec_dims[1] = {(npy_intp)seqlen};
+    PyArrayObject *prob_vec = (PyArrayObject *)PyArray_ZEROS(1, prob_vec_dims, NPY_DOUBLE, 0);
+    if (prob_vec == NULL) {
+        Py_DECREF(probmtx);
+        PyErr_SetString(PyExc_RuntimeError, "failed to create probability vector");
+        return NULL;
+    }
+    double *prob_vec_data = (double *)PyArray_DATA(prob_vec);
+    // Get pointer to the data in probmtx
+    struct basepair_prob *bpp = (struct basepair_prob *)PyArray_DATA((PyArrayObject *)probmtx);
+    npy_intp num_pairs = PyArray_DIM((PyArrayObject *)probmtx, 0);
 
+    for (npy_intp k = 0; k < num_pairs; k++) {
+        int32_t i = bpp->i;
+        int32_t j = bpp->j;
+        double prob = bpp->prob;
+
+        if (i < 0 || j < 0 
+            || (size_t) i >= rna_seq.size() || (size_t)j >= rna_seq.size()) {
+            Py_DECREF(probmtx);
+            Py_DECREF(prob_vec);
+            PyErr_SetString(PyExc_IndexError, "Index Out of Range of Probmtx");
+            return NULL;
+        }
+
+        prob_vec_data[i] += prob;
+        if (i != j){ // Avoid double counting
+            prob_vec_data[j] += prob;
+        }
+    }
+
+    PyObject *ret=Py_BuildValue("OdO", probmtx, free_energy, prob_vec);
+    Py_DECREF(probmtx);
+    Py_DECREF(prob_vec);
     return ret;
 }
 
@@ -458,7 +492,13 @@ static PyMethodDef linearpartition_methods[] = {
 };
 
 PyDoc_STRVAR(module_doc,
-"CPython interface to LinearPartition");
+"CPython interface to LinearPartition\n"
+"partition(sequence, [beam_size=100], [update_stack=None], [update_terminal=None]) -> (bpp_matrix, free_energy, prob_vector)\n\n"
+"Compute base pairing probabilities and free energy of RNA sequence.\n\n"
+"Returns a tuple containing:\n"
+"  bpp_matrix: structured array with fields 'i', 'j', and 'prob'\n"
+"  free_energy: partition function free energy\n"
+"  prob_vector: array of summed probabilities for each nucleotide position");
 
 static struct PyModuleDef linearpartitionmodule = {
     PyModuleDef_HEAD_INIT,
