@@ -329,7 +329,6 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                 updated_stack = false;
             }
         } 
-
     } else if (strcmp(mod, "custom") == 0) {
         if (engine_enum == ETERNA) {
             PyErr_SetString(PyExc_ValueError,
@@ -358,11 +357,11 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 
                 if (PyArray_TYPE(arr) != NPY_FLOAT64){
                     PyErr_SetString(PyExc_ValueError,
-                                "update_stack must be of dtype int64.");
+                                "update_stack must be of dtype Float 64.");
                     return NULL;
                 }
 
-                long *diffs = (long *)(PyArray_DATA(arr));
+                double *diffs = (double *)(PyArray_DATA(arr));
                 for (int i = 0; i < NBPAIRS + 1; i++) {
                     for (int j = 0; j < NBPAIRS + 1; j++) {
                         stack37[i][j] += diffs[i * (NBPAIRS + 1) + j];
