@@ -460,13 +460,14 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
     struct basepair_prob *bpp = (struct basepair_prob *)PyArray_DATA((PyArrayObject *)probmtx);
     npy_intp num_pairs = PyArray_DIM((PyArrayObject *)probmtx, 0);
 
-    for (npy_intp k = 0; k < num_pairs; k++) {
-        int32_t i = bpp->i;
-        int32_t j = bpp->j;
-        double prob = bpp->prob;
+    struct basepair_prob *bpp_end = bpp + num_pairs;
+    for (; bpp < bpp_end; bpp++) {
+        int32_t i = bpp -> i;
+        int32_t j = bpp -> j;
+        double prob = bpp -> prob;
 
         if (i < 0 || j < 0 
-            || (size_t) i >= rna_seq.size() || (size_t)j >= rna_seq.size()) {
+            || (size_t) i >= seqlen|| (size_t)j >= seqlen) {
             Py_DECREF(probmtx);
             Py_DECREF(prob_vec);
             PyErr_SetString(PyExc_IndexError, "Index Out of Range of Probmtx");
