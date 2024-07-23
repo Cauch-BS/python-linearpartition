@@ -29,9 +29,9 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
 #include <fstream>
-#include <sstream>
-#include <string>
-#include <iomanip>
+// #include <sstream>
+// #include <string>
+// #include <iomanip>
 
 int
 trap_fprintf(FILE *fp, const char *fmt, ...)
@@ -388,23 +388,23 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    if ( true ){
-        // For debugging
-        // Print the Updated Stack
-        std::ostringstream oss_stack, oss_terminal;
-        oss_stack << "Stack array contents:\n" << std::setprecision(6) << std::fixed;
-        for (int i = 0; i < NBPAIRS + 1; i++) {
-            for (int j = 0; j < NBPAIRS + 1; j++) {
-                oss_stack << stack37[i][j] << " ";
-            }
-            oss_stack << "\n";
-        }
+    // if ( true ){
+    //     // For debugging
+    //     // Print the Updated Stack
+    //     std::ostringstream oss_stack, oss_terminal;
+    //     oss_stack << "Stack array contents:\n" << std::setprecision(6) << std::fixed;
+    //     for (int i = 0; i < NBPAIRS + 1; i++) {
+    //         for (int j = 0; j < NBPAIRS + 1; j++) {
+    //             oss_stack << stack37[i][j] << " ";
+    //         }
+    //         oss_stack << "\n";
+    //     }
         
-        oss_terminal << "Terminal contents:\n" << TerminalAU37 << "\n";
+    //     oss_terminal << "Terminal contents:\n" << TerminalAU37 << "\n";
         
-        std::cerr << oss_stack.str() << std::endl;
-        std::cerr << oss_terminal.str() << std::endl;
-    }
+    //     std::cerr << oss_stack.str() << std::endl;
+    //     std::cerr << oss_terminal.str() << std::endl;
+    // }
 
     string rna_seq(seq);
     PyObject *probmtx;
@@ -466,7 +466,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         double prob = bpp -> prob;
 
         if (i < 0 || j < 0 
-            || (size_t) i >= seqlen|| (size_t)j >= seqlen) {
+            || (size_t) i >= seqlen|| (size_t) j >= seqlen) {
             Py_DECREF(probmtx);
             Py_DECREF(prob_vec);
             PyErr_SetString(PyExc_IndexError, "Index Out of Range of Probmtx");
