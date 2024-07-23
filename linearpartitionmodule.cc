@@ -271,7 +271,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                                    "update_stack", NULL};
     enum { ETERNA, VIENNA } engine_enum;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssiiiO:partition",
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssiidO:partition",
                                      (char**)kwlist, &seq, &engine, &mod,
                                      &beamsize, &dangles,
                                      &update_terminal, &update_stack))
@@ -334,7 +334,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
             PyErr_SetString(PyExc_ValueError,
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
-            if ((update_stack != NULL) &&  (PyArray_Check(update_stack))){
+            if ((update_stack != NULL) &&  (PyArray_Check(update_stack))) {
                 if (!updated_stack && !used_psi && !used_m1psi){
                     memcpy(ori_stack37, stack37, size_of_stack);
                 } else {
