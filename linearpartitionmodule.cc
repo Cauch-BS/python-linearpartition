@@ -40,9 +40,21 @@ trap_fprintf(FILE *fp, const char *fmt, ...)
     return 0;
 }
 
+int
+trap_printf(const char *fmt, ...)
+{
+    /* Block outputs to stderr */
+    return 0;
+}
+
 #define private protected
 #undef fprintf
 #define fprintf trap_fprintf
+#undef printf
+#define printf trap_printf
+
+// Intercept the MEA structure output
+#define __mea_hook__ (1) { threshknot_file_index = structure; } if (1)
 
 // Monkey patch LinearPartition symbols to allow double-linking of E and V
 
@@ -124,6 +136,7 @@ trap_fprintf(FILE *fp, const char *fmt, ...)
 #undef main
 #undef private
 #undef fprintf
+#undef printf
 
 struct basepair_prob {
     int32_t i;
@@ -132,34 +145,6 @@ struct basepair_prob {
 };
 
 static PyArray_Descr *partition_return_descr;
-
-#define GET_BASEPAIR_PROB \
-    PyObject * \
-    get_basepair_prob(void) \
-    { \
-        PyArrayObject *res; \
-        npy_intp dim; \
-        struct basepair_prob *bpp; \
-    \
-        dim = Pij.size(); \
-    \
-        res = (PyArrayObject *)PyArray_SimpleNewFromDescr(1, &dim, partition_return_descr); \
-        if (res == NULL) \
-            return NULL; \
-        Py_INCREF(partition_return_descr); \
-    \
-        assert(partition_return_descr->elsize == sizeof(struct basepair_prob)); \
-        bpp = (struct basepair_prob *)PyArray_DATA(res); \
-    \
-        for (auto it = Pij.begin(); it != Pij.end(); ++it) { \
-            bpp->i = it->first.first - 1; \
-            bpp->j = it->first.second - 1; \
-            bpp->prob = it->second; \
-            bpp++; \
-        } \
-    \
-        return (PyObject *)res; \
-    }
 
 // Using modified base pair parameters for pseudouridine
 // As we are hot swapping the parameter files we need to keep track of the original values
@@ -224,32 +209,47 @@ void update_bases(string mod){
 }
 
 
-class EternaBeamCKYParser : public LPE_BeamCKYParser {
+template <typename BaseParser>
+class BeamCKYParserTemplate: public BaseParser{
 public:
-    using LPE_BeamCKYParser::LPE_BeamCKYParser;
+    using BaseParser::BaseParser;
 
-    GET_BASEPAIR_PROB
+    PyObject* get_basepair_prob(void) {
+        PyArrayObject* res;
+        npy_intp dim;
+        struct basepair_prob* bpp;
 
-    double
-    get_free_energy(void)
-    {
-        State& viterbi=bestC[seq_length - 1];
-        return viterbi.alpha;
+        dim = this->Pij.size();
+
+        res = (PyArrayObject*)PyArray_SimpleNewFromDescr(1, &dim, partition_return_descr);
+        if (res == NULL)
+            return NULL;
+        Py_INCREF(partition_return_descr);
+
+        assert(partition_return_descr->elsize == sizeof(struct basepair_prob));
+        bpp = (struct basepair_prob*)PyArray_DATA(res);
+
+        for (auto it = this->Pij.begin(); it != this->Pij.end(); ++it) {
+            bpp->i = it->first.first - 1;
+            bpp->j = it->first.second - 1;
+            bpp->prob = it->second;
+            bpp++;
+        }
+
+        return (PyObject*)res;
     }
+
+
 };
 
-class ViennaBeamCKYParser : public LPV_BeamCKYParser {
-public:
-    using LPV_BeamCKYParser::LPV_BeamCKYParser;
+class EternaBeamCKYParser: public BeamCKYParserTemplate<LPE_BeamCKYParser> {   
+    public:
+    using BeamCKYParserTemplate::BeamCKYParserTemplate; // Inherit constructors
+};
 
-    GET_BASEPAIR_PROB
-
-    double
-    get_free_energy(void)
-    {
-        LPV_State& viterbi=bestC[seq_length - 1];
-        return -kT * viterbi.alpha / 100.0;
-    }
+class ViennaBeamCKYParser: public BeamCKYParserTemplate<LPV_BeamCKYParser> {
+    public:
+    using BeamCKYParserTemplate::BeamCKYParserTemplate; // Inherit constructors
 };
 
 PyDoc_STRVAR(linearpartition_partition_doc,
@@ -263,17 +263,18 @@ static PyObject *
 linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 {
     const char *seq, *engine="vienna", *mod = "none";
-    int beamsize=100, dangles=2;
+    int beamsize=100, dangles=2, sharpturn = 0;
+    float gamma = 3.0, bpp_cutoff = 0.0;
     double update_terminal = OriTerminalAU37;
     PyObject *update_stack = NULL;
     static const char *kwlist[] = {"seq", "engine", "mod",
-                                   "beamsize", "dangles", "update_terminal",
+                                   "beamsize", "sharpturn", "cutoff", "gamme", "dangles", "update_terminal",
                                    "update_stack", NULL};
     enum { ETERNA, VIENNA } engine_enum;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssiidO:partition",
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|ssipffidO:partition",
                                      (char**)kwlist, &seq, &engine, &mod,
-                                     &beamsize, &dangles,
+                                     &beamsize, &sharpturn, &bpp_cutoff, &gamma, &dangles,
                                      &update_terminal, &update_stack))
         return NULL;
 
@@ -409,34 +410,35 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
     string rna_seq(seq);
     PyObject *probmtx;
     double free_energy;
+    string mea_structure;
 
     /* Call LinearPartition */
     switch (engine_enum) {
     case ETERNA: {
-        EternaBeamCKYParser parser(beamsize, true, false, "", "", false, 0.0,
-            "", false, 3.0, "", false, false, 0.3, "", "", false, dangles);
+        EternaBeamCKYParser parser(beamsize, !sharpturn, false, "", "", false, bpp_cutoff,
+            "", true, gamma, "", false, false, 0.3, "", "", false, dangles);
         Py_BEGIN_ALLOW_THREADS
-        parser.parse(rna_seq);
+        free_energy = parser.parse(rna_seq);
         Py_END_ALLOW_THREADS
 
         probmtx = parser.get_basepair_prob();
         if (probmtx == NULL)
             return NULL;
-        free_energy = parser.get_free_energy();
+        mea_structure = parser.threshknot_file_index;
         break;
     }
 
     case VIENNA: {
-        ViennaBeamCKYParser parser(beamsize, true, false, "", "", false, 0.0,
-            "", false, 3.0, "", false, false, 0.3, "", "", false, dangles);
+        ViennaBeamCKYParser parser(beamsize, !sharpturn, false, "", "", false, bpp_cutoff,
+            "", true, gamma, "", false, false, 0.3, "", "", false, dangles);
         Py_BEGIN_ALLOW_THREADS
-        parser.parse(rna_seq);
+        free_energy = parser.parse(rna_seq);
         Py_END_ALLOW_THREADS
 
         probmtx = parser.get_basepair_prob();
         if (probmtx == NULL)
             return NULL;
-        free_energy = parser.get_free_energy();
+        mea_structure = parser.threshknot_file_index;
         break;
     }
 
@@ -479,10 +481,36 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         }
     }
 
-    PyObject *ret=Py_BuildValue("OdO", probmtx, free_energy, prob_vec);
+    PyObject *ret= NULL,*py_free_energy = NULL, *py_mea_structure=NULL;
+    bool failed = true;
+    do {
+        ret = PyDict_New();
+        if (ret == NULL) break;
+        py_free_energy = PyFloat_FromDouble(free_energy);
+        if (py_free_energy == NULL) break;
+        py_mea_structure = PyUnicode_FromString(mea_structure.c_str());
+        if (py_mea_structure == NULL) break;
+
+        PyDict_SetItemString(ret, "mea_structure", py_mea_structure);
+        PyDict_SetItemString(ret, "free_energy", py_free_energy);
+        PyDict_SetItemString(ret, "bpp", probmtx);
+        PyDict_SetItemString(ret, "prob_vector", (PyObject*) prob_vec);
+
+        failed = false;
+    } while (0);
+
+    Py_XDECREF(py_free_energy);
+    Py_XDECREF(py_mea_structure);
     Py_DECREF(probmtx);
     Py_DECREF(prob_vec);
-    return ret;
+    
+    if (failed) {
+        Py_XDECREF(ret);
+        return NULL;
+    } 
+    else {
+        return ret;
+    }
 }
 
 static PyMethodDef linearpartition_methods[] = {
@@ -498,7 +526,8 @@ PyDoc_STRVAR(module_doc,
 "Returns a tuple containing:\n"
 "  bpp_matrix: structured array with fields 'i', 'j', and 'prob'\n"
 "  free_energy: partition function free energy\n"
-"  prob_vector: array of summed probabilities for each nucleotide position");
+"  prob_vector: array of summed probabilities for each nucleotide position \n"
+"  mea_structure : Maximum Expected Accuracy structure");
 
 static struct PyModuleDef linearpartitionmodule = {
     PyModuleDef_HEAD_INIT,
