@@ -30,9 +30,9 @@
 #include "numpy/arrayobject.h"
 #include <fstream>
 #include <mutex>
-// #include <sstream>
-// #include <string>
-// #include <iomanip>
+#include <sstream>
+#include <string>
+#include <iomanip>
 
 int
 trap_fprintf(FILE *fp, const char *fmt, ...)
@@ -151,13 +151,12 @@ std::mutex update_mutex;
 
 static PyArray_Descr *partition_return_descr;
 
+
+const size_t size_of_stack = (NBPAIRS + 1) * (NBPAIRS + 1) * sizeof(double);
+
 void init_term37() {
     static const double ori_terminal37 = 50.0;
-    static thread_local bool initialized_term = false;
-    if (!initialized_term){
-        TerminalAU37 = ori_terminal37;
-        initialized_term = true;
-    }
+    TerminalAU37 = ori_terminal37;
 }
 
 void init_stack37() {
@@ -171,21 +170,16 @@ void init_stack37() {
         {   VIE_INF,  -210,  -240,  -130,  -100,   -90,  -130,   -90},
         {   VIE_INF,  -140,  -150,   130,    30,   -60,   -90,   130}
     };
-
-    static thread_local bool initialized_stack = false;
-    if (!initialized_stack) {
-        std::memcpy(stack37, ori_stack, sizeof(stack37));
-        initialized_stack = true;
-    }
+    std::memcpy(stack37, ori_stack, size_of_stack);
 }
 
-const size_t size_of_stack = (NBPAIRS + 1) * (NBPAIRS + 1) * sizeof(double);
+
 
 void update_bases(string mod){
     init_stack37();
     init_term37();
-    // Differences with the original values
 
+    // Differences with the original values
     std::lock_guard<std::mutex> lock(update_mutex);
 
     double diff[NBPAIRS + 1][NBPAIRS + 1];
@@ -220,6 +214,7 @@ void update_bases(string mod){
     } else if (mod == "none"){
         // do nothing
     }
+
 }
 
 
@@ -390,6 +385,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
+    // FLAG: Debugging
     // if ( true ){
     //     // For debugging
     //     // Print the Updated Stack
