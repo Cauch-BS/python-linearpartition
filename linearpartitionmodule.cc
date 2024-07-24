@@ -279,7 +279,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
     const char *seq, *engine="vienna", *mod = "none";
     int beamsize=100, dangles=2, sharpturn = 0;
     float gamma = 3.0, bpp_cutoff = 0.0;
-    double update_terminal = OriTerminalAU37;
+    double update_terminal = 50.0;
     PyObject *update_stack = NULL;
     static const char *kwlist[] = {"seq", "engine", "mod",
                                    "beamsize", "sharpturn", "cutoff", "gamme", "dangles", "update_terminal",
@@ -302,7 +302,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    if (update_stack != NULL || update_terminal != OriTerminalAU37){ 
+    if (update_stack != NULL || update_terminal != 50.0){ 
         if (PyArray_Check(update_stack)) {
             mod = "custom";
         } else {
@@ -364,7 +364,7 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 
                 double *diffs = (double *)(PyArray_DATA(arr));
                 {
-                std::lock_guard<std::mutex> lock(stack_mutex)
+                std::lock_guard<std::mutex> lock(stack_mutex);
                 for (int i = 0; i < NBPAIRS + 1; i++) {
                     for (int j = 0; j < NBPAIRS + 1; j++) {
                         stack37[i][j] += diffs[i * (NBPAIRS + 1) + j];
@@ -372,13 +372,13 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
                 }
                 }
             } else {
-                std::lock_guard<std::mutex> lock(error_mutex)
+                std::lock_guard<std::mutex> lock(error_mutex);
                 PyErr_SetString(PyExc_ValueError,
                         "when mod is 'custom', update_stack must be passed as a numpy array");
                 return NULL;
             }
             {
-                std::lock_guard<std::mutex> lock(stack_mutex)
+                std::lock_guard<std::mutex> lock(stack_mutex);
                 TerminalAU37 = update_terminal;
             }           
         }
