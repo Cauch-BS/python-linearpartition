@@ -29,6 +29,7 @@
 #include "Python.h"
 #include "numpy/arrayobject.h"
 #include <fstream>
+#include <mutex>
 // #include <sstream>
 // #include <string>
 // #include <iomanip>
@@ -144,28 +145,49 @@ struct basepair_prob {
     double prob;
 };
 
+std::mutex error_mutex;
+std::mutex stack_mutex;
+std::mutex update_mutex;
+
 static PyArray_Descr *partition_return_descr;
 
-// Using modified base pair parameters for pseudouridine
-// As we are hot swapping the parameter files we need to keep track of the original values
-// By contrast, ViennaRNA uses a soft constraint method to handle modified bases
-// TODO: Implement a soft constraint method
+void init_term37() {
+    static const double ori_terminal37 = 50.0;
+    static thread_local bool initialized_term = false;
+    if (!initialized_term){
+        TerminalAU37 = ori_terminal37;
+        initialized_term = true;
+    }
+}
 
-bool used_psi = false; /*True if mod is used. If false, update_bases is not run*/
-bool used_m1psi = false; /*True if mod is used. If false, update_bases is not run*/
-bool updated_stack = false; /*True if stack37 has been updated*/
+void init_stack37() {
+    static const double ori_stack[NBPAIRS+1][NBPAIRS+1] = {
+        {   VIE_INF,   VIE_INF,   VIE_INF,   VIE_INF,   VIE_INF,   VIE_INF,   VIE_INF,   VIE_INF},
+        {   VIE_INF,  -240,  -330,  -210,  -140,  -210,  -210,  -140},
+        {   VIE_INF,  -330,  -340,  -250,  -150,  -220,  -240,  -150},
+        {   VIE_INF,  -210,  -250,   130,   -50,  -140,  -130,   130},
+        {   VIE_INF,  -140,  -150,   -50,    30,   -60,  -100,    30},
+        {   VIE_INF,  -210,  -220,  -140,   -60,  -110,   -90,   -60},
+        {   VIE_INF,  -210,  -240,  -130,  -100,   -90,  -130,   -90},
+        {   VIE_INF,  -140,  -150,   130,    30,   -60,   -90,   130}
+    };
 
-double OriTerminalAU37 = TerminalAU37;
-double ori_stack37[NBPAIRS + 1][NBPAIRS + 1];
-size_t size_of_stack = (NBPAIRS + 1) * (NBPAIRS + 1) * sizeof(double);
+    static thread_local bool initialized_stack = false;
+    if (!initialized_stack) {
+        std::memcpy(stack37, ori_stack, sizeof(stack37));
+        initialized_stack = true;
+    }
+}
 
+const size_t size_of_stack = (NBPAIRS + 1) * (NBPAIRS + 1) * sizeof(double);
 
-/* NOTICE: update_bases should only be run once per modification
-Else the return to origin will not work properly.
-This is managed with the used_psi and used_m1psi booleans*/
 void update_bases(string mod){
-
+    init_stack37();
+    init_term37();
     // Differences with the original values
+
+    std::lock_guard<std::mutex> lock(update_mutex);
+
     double diff[NBPAIRS + 1][NBPAIRS + 1];
     memset(diff, 0, size_of_stack);
     double ModTerminal = 0;
@@ -188,12 +210,6 @@ void update_bases(string mod){
     }
 
     if (mod != "none"){
-        // Store the original values
-        if (!used_psi && !used_m1psi && !updated_stack){
-            memcpy(ori_stack37, stack37, size_of_stack);
-        } else {
-            memcpy(stack37, ori_stack37, size_of_stack);
-        }
         // Update the values
         TerminalAU37 = ModTerminal;
         for (int i = 0; i < NBPAIRS + 1; i++) {
@@ -202,9 +218,7 @@ void update_bases(string mod){
             }
         }
     } else if (mod == "none"){
-            TerminalAU37 = OriTerminalAU37;
-            // Return to the original values
-            memcpy(stack37, ori_stack37, size_of_stack);
+        // do nothing
     }
 }
 
@@ -300,86 +314,73 @@ linearpartition_partition(PyObject *self, PyObject *args, PyObject *kwds)
 
 
     if (strcmp(mod, "none") == 0) {
-        if ((used_psi || used_m1psi || updated_stack)){
-            update_bases("none");
-            used_psi = false;
-            used_m1psi = false;
-            updated_stack = false;
-        }
+        init_term37();
+        init_stack37();
     } else if (strcmp(mod, "psi") == 0) {
         if (engine_enum == ETERNA) {
             PyErr_SetString(PyExc_ValueError,
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
-            if (!used_psi){
-                update_bases("psi");
-                used_psi = true;
-                used_m1psi = false;
-                updated_stack = false;
-            }
+            update_bases("psi");
         } 
     } else if (strcmp(mod, "m1psi") == 0) {
         if (engine_enum == ETERNA) {
             PyErr_SetString(PyExc_ValueError,
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
-            if (!used_m1psi){
-                update_bases("m1psi");
-                used_m1psi = true;
-                used_psi = false;
-                updated_stack = false;
-            }
+            update_bases("m1psi");
         } 
     } else if (strcmp(mod, "custom") == 0) {
         if (engine_enum == ETERNA) {
+            std::lock_guard<std::mutex> lock(error_mutex);
             PyErr_SetString(PyExc_ValueError,
                     "Currently EternaFold does not support modified bases.");
         } else if (engine_enum == VIENNA) {
             if ((update_stack != NULL) &&  (PyArray_Check(update_stack))) {
-                if (!updated_stack && !used_psi && !used_m1psi){
-                    memcpy(ori_stack37, stack37, size_of_stack);
-                } else {
-                    memcpy(stack37, ori_stack37, size_of_stack);
-                }
-
+                init_term37();
+                init_stack37();
                 PyArrayObject *arr = (PyArrayObject *)update_stack;
                 int nd = PyArray_NDIM(arr);
                 if (nd != 2){
+                    std::lock_guard<std::mutex> lock(error_mutex);
                     PyErr_SetString(PyExc_ValueError,
                                 "update_stack must be a 2D array.");
                     return NULL;
                 }
                 npy_intp *shape = PyArray_DIMS(arr);
                 if (shape[0] != NBPAIRS + 1 || shape[1] != NBPAIRS + 1){
+                    std::lock_guard<std::mutex> lock(error_mutex);
                     PyErr_SetString(PyExc_ValueError,
                                 "update_stack is of incorrect shape. Rseshape to 8 x 8 array.");
                     return NULL;
                 }
 
                 if (PyArray_TYPE(arr) != NPY_FLOAT64){
+                    std::lock_guard<std::mutex> lock(error_mutex);
                     PyErr_SetString(PyExc_ValueError,
                                 "update_stack must be of dtype Float 64.");
                     return NULL;
                 }
 
                 double *diffs = (double *)(PyArray_DATA(arr));
+                {
+                std::lock_guard<std::mutex> lock(stack_mutex)
                 for (int i = 0; i < NBPAIRS + 1; i++) {
                     for (int j = 0; j < NBPAIRS + 1; j++) {
                         stack37[i][j] += diffs[i * (NBPAIRS + 1) + j];
                     }
                 }
+                }
             } else {
+                std::lock_guard<std::mutex> lock(error_mutex)
                 PyErr_SetString(PyExc_ValueError,
                         "when mod is 'custom', update_stack must be passed as a numpy array");
                 return NULL;
             }
-
-            TerminalAU37 = update_terminal;
-
-            updated_stack = true;
-            used_m1psi = false;
-            used_psi = false;
-            
+            {
+                std::lock_guard<std::mutex> lock(stack_mutex)
+                TerminalAU37 = update_terminal;
+            }           
         }
     } else {
         PyErr_SetString(PyExc_ValueError,

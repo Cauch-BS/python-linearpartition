@@ -43,7 +43,7 @@ DOI : 10.1261/rna.039610.113
 }
 */
 
-double ModTerminalAP37 = 31;
+thread_local double ModTerminalAP37 = 31;
 
 
 // int diff_psi[NBPAIRS+1][NBPAIRS+1] = 
@@ -72,7 +72,7 @@ double ModTerminalAP37 = 31;
 //      /*NN*/,{           0,          0,          0,          0,          0,          0,          0,          0}
 //     } ;
 
-double diff_psi[NBPAIRS+1][NBPAIRS+1] = 
+thread_local double diff_psi[NBPAIRS+1][NBPAIRS+1] = 
     {
     //                             CG          GC          GU          UG          AP          PA          NN   
             {           0,          0,          0,          0,          0,          0,          0,          0}
@@ -85,7 +85,7 @@ double diff_psi[NBPAIRS+1][NBPAIRS+1] =
      /*NN*/,{           0,          0,          0,          0,          0,          0,          0,          0}
     } ;
 
-double diff_m1psi[NBPAIRS+1][NBPAIRS+1] = 
+thread_local double diff_m1psi[NBPAIRS+1][NBPAIRS+1] = 
     {
     //                             CG          GC          GU          UG          AP          PA          NN   
             {           0,          0,          0,          0,          0,          0,          0,          0}
