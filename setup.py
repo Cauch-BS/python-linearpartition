@@ -50,7 +50,7 @@ def patch_linearpartition_files(srcdir):
 patch_linearpartition_files('LinearPartition/src')
 
 setup(
-    name='linearpartition-unofficial',
+    name='linearpartition',
     version='0.3',
     description='Python interface to LinearPartition, a linear-time RNA secondary structure prediction tool',
     author='Hyeshik Chang',
